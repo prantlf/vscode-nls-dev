@@ -49,7 +49,7 @@ export function rewriteLocalizeCalls(): ThroughStream {
 				return;
 			} else {
 				if (result.contents) {
-					file.contents = new Buffer(result.contents, 'utf8');
+					file.contents = Buffer.from(result.contents, 'utf8');
 				}
 				if (result.sourceMap) {
 					file.sourceMap = JSON.parse(result.sourceMap);
@@ -60,13 +60,13 @@ export function rewriteLocalizeCalls(): ThroughStream {
 					messagesFile = new File({
 						base: file.base,
 						path: filePath + NLS_JSON,
-						contents: new Buffer(JSON.stringify(result.bundle.messages, null, '\t'), 'utf8')
+						contents: Buffer.from(JSON.stringify(result.bundle.messages, null, '\t'), 'utf8')
 					});
 					let metaDataContent: SingleMetaDataFile = Object.assign({}, result.bundle, { filePath: removePathPrefix(filePath, file.base) });
 					metaDataFile = new File({
 						base: file.base,
 						path: filePath + NLS_METADATA_JSON,
-						contents: new Buffer(JSON.stringify(metaDataContent, null, '\t'), 'utf8')
+						contents: Buffer.from(JSON.stringify(metaDataContent, null, '\t'), 'utf8')
 					});
 				}
 			}
@@ -106,13 +106,13 @@ export function createMetaDataFiles(): ThroughStream {
 				this.queue(new File({
 					base: file.base,
 					path: filePath + NLS_JSON,
-					contents: new Buffer(JSON.stringify(result.bundle.messages, null, '\t'), 'utf8')
+					contents: Buffer.from(JSON.stringify(result.bundle.messages, null, '\t'), 'utf8')
 				}));
 				let metaDataContent: SingleMetaDataFile = Object.assign({}, result.bundle, { filePath: removePathPrefix(filePath, file.base) });
 				this.queue(new File({
 					base: file.base,
 					path: filePath + NLS_METADATA_JSON,
-					contents: new Buffer(JSON.stringify(metaDataContent, null, '\t'), 'utf8')
+					contents: Buffer.from(JSON.stringify(metaDataContent, null, '\t'), 'utf8')
 				}));
 			}
 		}
@@ -148,12 +148,12 @@ export function bundleMetaDataFiles(id: string, outDir: string): ThroughStream {
 			this.queue(new File({
 				base: base,
 				path: path.join(base, 'nls.metadata.header.json'),
-				contents: new Buffer(JSON.stringify(header), 'utf8')
+				contents: Buffer.from(JSON.stringify(header), 'utf8')
 			}));
 			this.queue(new File({
 				base: base,
 				path: path.join(base, 'nls.metadata.json'),
-				contents: new Buffer(JSON.stringify(content), 'utf8')
+				contents: Buffer.from(JSON.stringify(content), 'utf8')
 			}));
 		}
 		this.queue(null);
@@ -194,7 +194,7 @@ export function createAdditionalLanguageFiles(languages: Language[], i18nBaseDir
 					this.queue(new File({
 						base: file.base,
 						path: path.join(file.base, filename) + '.nls.' + language.id + '.json',
-						contents: new Buffer(JSON.stringify(result.messages, null, '\t').replace(/\r\n/g, '\n'), 'utf8')
+						contents: Buffer.from(JSON.stringify(result.messages, null, '\t').replace(/\r\n/g, '\n'), 'utf8')
 					}));
 				}
 			});
@@ -244,7 +244,7 @@ export function bundleLanguageFiles(): ThroughStream {
 			const file = new File({
 				base: bundle.base,
 				path: path.join(bundle.base, `nls.bundle.${languageId}json`),
-				contents: new Buffer(JSON.stringify(bundle.content), 'utf8')
+				contents: Buffer.from(JSON.stringify(bundle.content), 'utf8')
 			});
 			this.queue(file);
 		}
@@ -287,7 +287,7 @@ export function createKeyValuePairFile(commentSeparator: string | undefined = un
 				kvpFile = new File({
 					base: file.base,
 					path: path.join(file.base, filename) + I18N_JSON,
-					contents: new Buffer(JSON.stringify(kvpObject, null, '\t'), 'utf8')
+					contents: Buffer.from(JSON.stringify(kvpObject, null, '\t'), 'utf8')
 				});
 			} else {
 				this.emit('error', `Not a valid JavaScript message bundle: ${file.relative}`);
@@ -574,7 +574,7 @@ export function createXlfFiles(projectName: string, extensionName: string): Thro
 		if (_xlf) {
 			const xlfFile = new File({
 				path: path.join(projectName, extensionName + '.xlf'),
-				contents: new Buffer(_xlf.toString(), 'utf8')
+				contents: Buffer.from(_xlf.toString(), 'utf8')
 			});
 			this.queue(xlfFile);
 		}
@@ -617,7 +617,7 @@ function createI18nFile(originalFilePath: string, messages: Map<string>): File {
 
 	return new File({
 		path: path.join(originalFilePath + '.i18n.json'),
-		contents: new Buffer(content, 'utf8')
+		contents: Buffer.from(content, 'utf8')
 	});
 }
 
