@@ -30,7 +30,7 @@ language servers written in TS and JS. It also contains helper methods to conver
 * based on TypeScript 2.0. Since TS changed the shape of the d.ts files for 2.0.x a major version number got introduce to not break existing clients using TypeScript 1.8.x.
 
 ### JSON->XLIFF->JSON
-To perform unlocalized JSON to XLIFF conversion it is required to call `prepareXlfFiles(projectName, extensionName)` piping your extension/language server directory to it, where `projectName` is the Transifex project name (if such exists) and `extensionName` is the name of your extension/language server. Thereby, XLF files will have a path of `projectName/extensionName.xlf`.
+To perform unlocalized JSON to XLIFF conversion it is required to call `createXlfFiles(projectName, extensionName)` piping your extension/language server directory to it, where `projectName` is the Transifex project name (if such exists) and `extensionName` is the name of your extension/language server. Thereby, XLF files will have a path of `projectName/extensionName.xlf`.
 
 To convert translated XLIFF to localized JSON files `prepareJsonFiles(languages, prolog?)` should be called, piping `.xlf` files to it. It will parse translated XLIFF to JSON files, reconstructed under original file paths, optionally with a prolog prepended.
 

@@ -11,7 +11,7 @@ import { ThroughStream as _ThroughStream } from 'through';
 import * as xml2js from 'xml2js';
 import {
 	bundle2keyValuePair, createLocalizedMessages, JavaScriptMessageBundle, KeyInfo, Map, processFile, resolveMessageBundle, removePathPrefix, BundledMetaDataHeader,
-	BundledMetaDataFile, SingleMetaDataFile, BundledMetaDataEntry, MetaDataBundler, PackageJsonMessageBundle
+	BundledMetaDataFile, SingleMetaDataFile, BundledMetaDataEntry, MetaDataBundler, MessageBundle, PackageJsonMessageBundle
 } from './lib';
 import File = require('vinyl');
 import * as fancyLog from 'fancy-log';
@@ -574,13 +574,15 @@ export class XLF {
 	}
 }
 
-export function createXlfFiles(projectName: string, extensionName: string): ThroughStream {
+export function createXlfFiles(projectName: string, extensionName: string, language?: Language): ThroughStream {
+	const { id: languageId } = language || {};
 	let _xlf: XLF;
 	let header: BundledMetaDataHeader | undefined;
 	let data: BundledMetaDataFile | undefined;
+	let packageBundle: PackageJsonMessageBundle, bundle: MessageBundle;
 	function getXlf() {
 		if (!_xlf) {
-			_xlf = new XLF(projectName);
+			_xlf = new XLF(projectName, languageId);
 		}
 		return _xlf;
 	}
@@ -599,8 +601,12 @@ export function createXlfFiles(projectName: string, extensionName: string): Thro
 				return value === undefined ? `Unknown message for key: ${key}` : value;
 			});
 			getXlf().addFile('package', keys, messages);
+		} else if (languageId && basename === `package.nls.${languageId}.json`) {
+			packageBundle = JSON.parse(buffer.toString('utf8'));
 		} else if (basename === 'nls.metadata.json') {
 			data = JSON.parse(buffer.toString('utf8'));
+		} else if (languageId && basename === `nls.bundle.${languageId}.json`) {
+			bundle = JSON.parse(buffer.toString('utf8'));
 		} else if (basename === 'nls.metadata.header.json') {
 			header = JSON.parse(buffer.toString('utf8'));
 		} else {
@@ -608,17 +614,25 @@ export function createXlfFiles(projectName: string, extensionName: string): Thro
 			return;
 		}
 	}, function (this: ThroughStream) {
+		if (language) {
+			getXlf().setLanguagePackage('package', packageBundle);
+		}
 		if (header && data) {
 			const outDir = header.outDir;
 			for (const module in data) {
 				const fileContent: BundledMetaDataEntry = data[module];
 				// in the XLF files we only use forward slashes.
-				getXlf().addFile(`${outDir}/${module.replace(/\\/g, '/')}`, fileContent.keys, fileContent.messages);
+				const fileName = module.replace(/\\/g, '/');
+				const filePath = path.join(outDir, fileName);
+				getXlf().addFile(filePath, fileContent.keys, fileContent.messages);
+				if (language) {
+					getXlf().setLanguageBundle(filePath, bundle && bundle[fileName]);
+				}
 			}
 		}
 		if (_xlf) {
 			const xlfFile = new File({
-				path: path.join(projectName, extensionName + '.xlf'),
+				path: path.join(projectName, `${extensionName}${languageId ? '.' + languageId : ''}.xlf`),
 				contents: Buffer.from(_xlf.toString(), 'utf8')
 			});
 			this.queue(xlfFile);

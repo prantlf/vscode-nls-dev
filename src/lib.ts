@@ -106,6 +106,10 @@ export namespace ResolvedJavaScriptMessageBundle {
 	}
 }
 
+export interface MessageBundle {
+	[key: string]: string[];
+}
+
 export interface PackageJsonMessageBundle {
 	[key: string]: string;
 }
