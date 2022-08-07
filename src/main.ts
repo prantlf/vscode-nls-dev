@@ -635,6 +635,12 @@ function encodeEntities(value: string): string {
 			case '&':
 				result.push('&amp;');
 				break;
+			case '"':
+				result.push('&quot;');
+				break;
+			case '\'':
+				result.push('&#39;');
+				break;
 			default:
 				result.push(ch);
 		}
@@ -643,5 +649,10 @@ function encodeEntities(value: string): string {
 }
 
 function decodeEntities(value: string): string {
-	return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+	return value
+		.replace(/&lt;/g, '<')
+		.replace(/&gt;/g, '>')
+		.replace(/&amp;/g, '&')
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, '\'');
 }
