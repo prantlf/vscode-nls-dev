@@ -11,7 +11,7 @@ import { ThroughStream as _ThroughStream } from 'through';
 import * as xml2js from 'xml2js';
 import {
 	bundle2keyValuePair, createLocalizedMessages, JavaScriptMessageBundle, KeyInfo, Map, processFile, resolveMessageBundle, removePathPrefix, BundledMetaDataHeader,
-	BundledMetaDataFile, SingleMetaDataFile, BundledMetaDataEntry, MetaDataBundler
+	BundledMetaDataFile, SingleMetaDataFile, BundledMetaDataEntry, MetaDataBundler, PackageJsonMessageBundle
 } from './lib';
 import File = require('vinyl');
 import * as fancyLog from 'fancy-log';
@@ -308,6 +308,7 @@ interface Item {
 	id: string;
 	message: string;
 	comment?: string;
+	target?: string;
 }
 
 interface PackageJsonMessageFormat {
@@ -375,17 +376,19 @@ export interface ParsedXLF {
 export class XLF {
 	private buffer: string[];
 	private files: Map<Item[]>;
+	private target?: string;
 
-	constructor(public project: string) {
+	constructor(public project: string, target?: string) {
 		this.buffer = [];
 		this.files = Object.create(null);
+		this.target = target;
 	}
 
 	public toString(): string {
 		this.appendHeader();
 
 		for (const file in this.files) {
-			this.appendNewLine(`<file original="${file}" source-language="en" datatype="plaintext"><body>`, 2);
+			this.appendNewLine(`<file original="${file}" source-language="en" ${this.target ? 'target-language="' + this.target + '" ' : ''}datatype="plaintext"><body>`, 2);
 			for (const item of this.files[file]) {
 				this.addStringItem(item);
 			}
@@ -428,6 +431,44 @@ export class XLF {
 		}
 	}
 
+	public setLanguageBundle(original: string, translation: string[]) {
+		const file = this.files[original];
+		if (!file) {
+			throw new Error(`Un-matching original(${original}).`);
+		}
+		if (!translation) {
+			throw new Error(`Missing target(${original}).`);
+		}
+		if (file.length !== translation.length) {
+			throw new Error(`Mis-matching target(${original}).`);
+		}
+
+		for (let i = 0, l = file.length; i < l; ++i) {
+			file[i].target = encodeEntities(translation[i]);
+		}
+	}
+
+	public setLanguagePackage(original: string, translation: PackageJsonMessageBundle) {
+		const file = this.files[original];
+		if (!file) {
+			throw new Error(`Un-matching original(${original}).`);
+		}
+		if (!translation) {
+			throw new Error(`Missing target(${original}).`);
+		}
+		if (file.length !== Object.keys(translation).length) {
+			throw new Error(`Mis-matching target(${original}).`);
+		}
+
+		for (const key in translation) {
+			const entry = file.find(({ id }) => id === key);
+			if (!entry) {
+				throw new Error(`Un-matching key(${key}) in original(${original}).`);
+			}
+			entry.target = encodeEntities(translation[key]);
+		}
+	}
+
 	private addStringItem(item: Item): void {
 		if (!item.id || !item.message) {
 			throw new Error('No item ID or value specified.');
@@ -438,6 +479,10 @@ export class XLF {
 
 		if (item.comment) {
 			this.appendNewLine(`<note>${item.comment}</note>`, 6);
+		}
+
+		if (item.target) {
+			this.appendNewLine(`<target>${item.target}</target>`, 6);
 		}
 
 		this.appendNewLine('</trans-unit>', 4);
@@ -458,7 +503,7 @@ export class XLF {
 		this.buffer.push(line.toString());
 	}
 
-	static parse(xlfString: string): Promise<ParsedXLF[]> {
+	static parse(xlfString: string, forceLanguage: boolean = true): Promise<ParsedXLF[]> {
 		const getValue = function (this: void, target: any): string | undefined {
 			if (typeof target === 'string') {
 				return target;
@@ -497,8 +542,8 @@ export class XLF {
 					if (!originalFilePath) {
 						reject(new Error('XLIFF file node does not contain original attribute to determine the original location of the resource file.'));
 					}
-					const language = file.$['target-language'].toLowerCase();
-					if (!language) {
+					const language = file.$['target-language']?.toLowerCase();
+					if (forceLanguage && !language) {
 						reject(new Error('XLIFF file node does not contain target-language attribute to determine translated language.'));
 					}
 
@@ -507,14 +552,14 @@ export class XLF {
 					if (transUnits) {
 						transUnits.forEach((unit: any) => {
 							const key = unit.$.id;
-							if (!unit.target) {
+							if (forceLanguage && !unit.target) {
 								return; // No translation available
 							}
 
-							const val = getValue(unit.target);
+							const val = getValue(unit.target || unit.source);
 							if (key && val) {
 								messages[key] = decodeEntities(val);
-							} else {
+							} else if (forceLanguage) {
 								reject(new Error('XLIFF file does not contain full localization data. ID or target translation for one of the trans-unit nodes is not present.'));
 							}
 						});
