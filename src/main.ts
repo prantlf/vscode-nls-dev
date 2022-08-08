@@ -4,7 +4,8 @@
  * ------------------------------------------------------------------------------------------ */
 'use strict';
 
-import { through, ThroughStream } from 'event-stream';
+import { readable, through, ThroughStream } from 'event-stream';
+import * as https from 'https';
 import * as Is from 'is';
 import * as path from 'path';
 import { ThroughStream as _ThroughStream } from 'through';
@@ -638,6 +639,276 @@ export function createXlfFiles(projectName: string, extensionName: string, langu
 			this.queue(xlfFile);
 		}
 		this.queue(null);
+	});
+}
+
+export function pushXlfFiles(apiHostname: string, username: string, password: string, languages?: Language[]): ThroughStream {
+	let tryGetPromises: Promise<boolean>[] = [];
+	let updateCreatePromises: Promise<any>[] = [];
+
+	return through(function (this: ThroughStream, file: File) {
+		const project = path.basename(path.dirname(file.path));
+		const fileName = path.basename(file.path);
+		const credentials = `${username}:${password}`;
+		const language = languages?.find(({ id }) => fileName.endsWith(`.${id}.xlf`));
+
+		if (language) {
+			const slug = fileName.substr(0, fileName.length - `.${language.id}.xlf`.length);
+			const resource = { project, name: slug };
+			updateCreatePromises.push(translateResource(language, file, resource, apiHostname, credentials));
+		} else {
+			const slug = fileName.substr(0, fileName.length - '.xlf'.length);
+			// Check if resource already exists, if not, then create it.
+			let promise = tryGetResource(project, slug, apiHostname, credentials);
+			tryGetPromises.push(promise);
+			promise.then(exists => {
+				if (exists) {
+					promise = updateResource(project, slug, file, apiHostname, credentials);
+				} else {
+					promise = createResource(project, slug, file, apiHostname, credentials);
+				}
+				updateCreatePromises.push(promise);
+			});
+		}
+	}, function () {
+		// End the pipe only after all the communication with Transifex API happened
+		Promise.all(tryGetPromises).then(() => {
+			Promise.all(updateCreatePromises).then(() => {
+				this.queue(null);
+			}).catch((reason) => { throw new Error(reason); });
+		}).catch((reason) => { throw new Error(reason); });
+	});
+}
+
+function tryGetResource(project: string, slug: string, apiHostname: string, credentials: string): Promise<boolean> {
+	return new Promise((resolve, reject) => {
+		const options = {
+			hostname: apiHostname,
+			path: `/api/2/project/${project}/resource/${slug}/?details`,
+			auth: credentials,
+			method: 'GET'
+		};
+
+		const request = https.request(options, (response) => {
+			if (response.statusCode === 404) {
+				resolve(false);
+			} else if (response.statusCode === 200) {
+				resolve(true);
+			} else {
+				reject(`Failed to query resource ${project}/${slug}. Response: ${response.statusCode} ${response.statusMessage}`);
+			}
+		});
+		request.on('error', (err) => {
+			reject(`Failed to get ${project}/${slug} on Transifex: ${err}`);
+		});
+
+		request.end();
+	});
+}
+
+function createResource(project: string, slug: string, xlfFile: File, apiHostname: string, credentials: any): Promise<any> {
+	return new Promise((resolve, reject) => {
+		const data = JSON.stringify({
+			'content': xlfFile?.contents?.toString(),
+			'name': slug,
+			'slug': slug,
+			'i18n_type': 'XLIFF'
+		});
+		const options = {
+			hostname: apiHostname,
+			// path: `/api/2/project/${project}/resource/${slug}/translation/${transifexLanguageId}?file&mode=onlyreviewed`,
+
+			path: `/api/2/project/${project}/resources`,
+			headers: {
+				'Content-Type': 'application/json',
+				'Content-Length': Buffer.byteLength(data)
+			},
+			auth: credentials,
+			method: 'POST'
+		};
+
+		let request = https
+			.request(options, (res) => {
+				if (res.statusCode === 201) {
+					log(`Resource ${project}/${slug} successfully created on Transifex.`);
+				} else {
+					reject(`Something went wrong in the request creating ${slug} in ${project}. ${res.statusCode}`);
+				}
+			})
+			.on('error', (err) => {
+				reject(`Failed to create ${project}/${slug} on Transifex: ${err}`);
+			})
+			.on('close', () => {
+				resolve(true);
+			});
+
+		request.write(data);
+		request.end();
+	});
+}
+
+/**
+ * The following link provides information about how Transifex handles updates of a resource file:
+ * https://dev.befoolish.co/tx-docs/public/projects/updating-content#what-happens-when-you-update-files
+ */
+function updateResource(project: string, slug: string, xlfFile: File, apiHostname: string, credentials: string): Promise<any> {
+	return new Promise((resolve, reject) => {
+		const data = JSON.stringify({ content: xlfFile?.contents?.toString() });
+		const options = {
+			hostname: apiHostname,
+			path: `/api/2/project/${project}/resource/${slug}/content`,
+			headers: {
+				'Content-Type': 'application/json',
+				'Content-Length': Buffer.byteLength(data)
+			},
+			auth: credentials,
+			method: 'PUT'
+		};
+
+		let request = https.request(options, (res) => {
+			if (res.statusCode === 200) {
+				res.setEncoding('utf8');
+
+				let responseBuffer: string = '';
+				res.on('data', function (chunk) {
+					responseBuffer += chunk;
+				});
+				res.on('end', () => {
+					const response = JSON.parse(responseBuffer);
+					log(`Resource ${project}/${slug} successfully updated on Transifex. Strings added: ${response.strings_added}, updated: ${response.strings_updated}, deleted: ${response.strings_delete}`);
+					resolve(true);
+				});
+			} else {
+				reject(`Something went wrong in the request updating ${slug} in ${project}. ${res.statusCode}`);
+			}
+		});
+		request.on('error', (err) => {
+			reject(`Failed to update ${project}/${slug} on Transifex: ${err}`);
+		});
+
+		request.write(data);
+		request.end();
+	});
+}
+
+/**
+ * Fetches Xlf files from transifex. Returns a file stream with paths `${project}/${slug}.${language.id}.xlf`
+ *
+ * @param apiHostname The hostname, e.g. www.transifex.com
+ * @param username The user name, e.g. api
+ * @param password The password or access token
+ * @param language The language used to pull.
+ * @param resources The list of resources to fetch
+ */
+export function pullXlfFiles(apiHostname: string, username: string, password: string, languages: Language | Language[], resources: Resource[]): NodeJS.ReadableStream {
+	if (!languages) {
+		throw new Error('Transifex projects and languages must be defined to be able to pull translations from Transifex.');
+	}
+	if (!resources) {
+		throw new Error('Transifex projects and resources must be defined to be able to pull translations from Transifex.');
+	}
+
+	if (!Array.isArray(languages)) {
+		languages = [languages];
+	}
+	const credentials = `${username}:${password}`;
+	let expectedTranslationsCount = languages.length * resources.length;
+	let translationsRetrieved = 0, called = false;
+
+	return readable(function (_count, callback) {
+		// Mark end of stream when all resources were retrieved
+		if (translationsRetrieved === expectedTranslationsCount) {
+			this.emit('end');
+			return;
+		}
+
+		if (!called) {
+			called = true;
+			const stream = this;
+
+			for (const resource of resources) {
+				for (const language of languages as Language[]) {
+					retrieveResource(language, resource, apiHostname, credentials)
+						.then((file: File) => {
+							stream.emit('data', file);
+							translationsRetrieved++;
+						}).catch(error => { throw new Error(error); });
+				}
+			}
+		}
+
+		callback();
+	});
+}
+
+function retrieveResource(language: Language, resource: Resource, apiHostname: string, credentials: string): Promise<File> {
+	return new Promise<File>((resolve, reject) => {
+		const slug = resource.name.replace(/\//g, '_');
+		const project = resource.project;
+		const transifexLanguageId = language.id;
+		const options: https.RequestOptions = {
+			hostname: apiHostname,
+			path: `/api/2/project/${project}/resource/${slug}/translation/${transifexLanguageId}?file&mode=onlyreviewed`,
+			auth: credentials,
+			method: 'GET'
+		};
+
+		let request = https.request(options, (res) => {
+			let xlfBuffer: Buffer[] = [];
+			res.on('data', (chunk) => xlfBuffer.push(<Buffer>chunk));
+			res.on('end', () => {
+				if (res.statusCode === 200) {
+					resolve(new File({ contents: Buffer.concat(xlfBuffer), path: `${project}/${slug}.${transifexLanguageId}.xlf` }));
+				}
+				reject(`${slug} in ${project} returned no data. Response code: ${res.statusCode}.`);
+			});
+		});
+		request.on('error', (err) => {
+			reject(`Failed to query resource ${project}/${slug}/${transifexLanguageId} with the following error: ${err}`);
+		});
+		request.end();
+	});
+}
+
+function translateResource(language: Language, xlfFile: File, resource: Resource, apiHostname: string, credentials: string): Promise<any> {
+	return new Promise((resolve, reject) => {
+		const slug = resource.name.replace(/\//g, '_');
+		const project = resource.project;
+		const transifexLanguageId = language.id;
+		const data = JSON.stringify({ content: xlfFile?.contents?.toString() });
+		const options: https.RequestOptions = {
+			hostname: apiHostname,
+			path: `/api/2/project/${project}/resource/${slug}/translation/${transifexLanguageId}`,
+			headers: {
+				'Content-Type': 'application/json',
+				'Content-Length': Buffer.byteLength(data)
+			},
+			auth: credentials,
+			method: 'PUT'
+		};
+
+		let request = https.request(options, (res) => {
+			if (res.statusCode === 200) {
+				res.setEncoding('utf8');
+
+				let responseBuffer: string = '';
+				res.on('data', function (chunk) {
+					responseBuffer += chunk;
+				});
+				res.on('end', () => {
+					const response = JSON.parse(responseBuffer);
+					log(`Resource ${project}/${slug}/${transifexLanguageId} successfully updated on Transifex. Strings added: ${response.strings_added}, updated: ${response.strings_updated}, deleted: ${response.strings_delete}`);
+					resolve(true);
+				});
+			} else {
+				reject(`Something went wrong in the request updating ${slug} in ${project}. ${res.statusCode}`);
+			}
+		});
+		request.on('error', (err) => {
+			reject(`Failed to update resource ${project}/${slug} with the following error: ${err}`);
+		});
+		request.write(data);
+		request.end();
 	});
 }
 
