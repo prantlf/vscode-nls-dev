@@ -1,44 +1,34 @@
-# vscode-nls-dev
-The tools automates the extraction of strings to be externalized from TS and JS code. It therefore helps localizing VSCode extensions and
-language servers written in TS and JS. It also contains helper methods to convert unlocalized JSON to XLIFF format for translations, and back to localized JSON files, with ability to push and pull localizations from Transifex platform.
+# @prantlf/vscode-nls-dev
 
-[![Build Status](https://travis-ci.org/Microsoft/vscode-nls-dev.svg?branch=master)](https://travis-ci.org/Microsoft/vscode-nls-dev)
-[![NPM Version](https://img.shields.io/npm/v/vscode-nls-dev.svg)](https://npmjs.org/package/vscode-nls-dev)
-[![NPM Downloads](https://img.shields.io/npm/dm/vscode-nls-dev.svg)](https://npmjs.org/package/vscode-nls-dev)
+[![Latest version](https://img.shields.io/npm/v/@prantlf/vscode-nls-dev)
+ ![Dependency status](https://img.shields.io/librariesio/release/npm/@prantlf/vscode-nls-dev)
+](https://www.npmjs.com/package/@prantlf/vscode-nls-dev)
 
-### 4.0.0-next.1
+The tools automates the extraction of strings to be externalized from TS and JS code. It therefore helps localizing VSCode extensions and language servers written in TS and JS. It also contains helper methods to convert unlocalized JSON to XLIFF format for translations, and back to localized JSON files, with ability to push and pull localizations from Transifex platform.
 
-* [Add support for comments in messages (e.g. package.nls.json)](https://github.com/microsoft/vscode-nls-dev/issues/32)
-* Remove Transifex support
-* General code cleanup. Move to TS 4.3.1 and more stricter type checking.
+## JS->JS+JSON
 
-### 3.3.2
+To build the distributable extension including localisation bundles, a sequence of tasks is needed to be called.
 
-* Merged [allow es imports, update ts and use their helper methods](https://github.com/microsoft/vscode-nls-dev/pull/27)
+1. `ensureMappings()` - if your  do sources are plain JavaScript loaded from the disk and not transpiled output from TypeScript or other language. The task `rewriteLocalizeCalls` requires source map mappings, although the code to process would not need them.
+2. `createMetaDataFiles()` - prepare metadata with all English localisable strings and metadata header about your extension.
+3. `rewriteLocalizeCalls()` - modify the localisation calls to consume the bundled localisable strings.
+4. `createAdditionalLanguageFiles(languages, 'i18n', 'out')` - extract English localisable strings for each source file to a i18n JSON file.
+5. `bundleMetaDataFiles(vscodeExtensionId, 'out')` - write out `nls.metadata.json` and `nls.metadata.header.json`.
+6. `bundleLanguageFiles()` - write out `nls.bundle.json` and `nls.bundle.<language>.json`.
 
-### 3.0.0
+## JSON->XLIFF->JSON
 
-* added support to bundle the strings into a single `nls.bundle(.${locale})?.json` file.
-* added support for VS Code language packs.
-
-### 2.1.0:
-
-* Add support to push to and pull from Transifex.
-
-### 2.0.0:
-
-* based on TypeScript 2.0. Since TS changed the shape of the d.ts files for 2.0.x a major version number got introduce to not break existing clients using TypeScript 1.8.x.
-
-### JSON->XLIFF->JSON
 To perform unlocalized JSON to XLIFF conversion it is required to call `createXlfFiles(projectName, extensionName)` piping your extension/language server directory to it, where `projectName` is the Transifex project name (if such exists) and `extensionName` is the name of your extension/language server. Thereby, XLF files will have a path of `projectName/extensionName.xlf`.
 
 To convert translated XLIFF to localized JSON files `prepareJsonFiles(languages, prolog?)` should be called, piping `.xlf` files to it. It will parse translated XLIFF to JSON files, reconstructed under original file paths, optionally with a prolog prepended.
 
-### Transifex Push and Pull
+## Transifex Push and Pull
+
 Updating Transifex with latest unlocalized strings is done via `pushXlfFiles('www.transifex.com', apiName, apiToken)` and `pullXlfFiles('www.transifex.com', apiName, apiToken, languages, resources)` for pulling localizations respectively. When pulling, you have to provide `resources` array with object literals that have `name` and `project` properties. `name` corresponds to the resource name in Transifex and `project` is a project name of your Transifex project where this resource is stored. `languages` argument is an array of strings of culture names to be pulled from Transifex.
 
+## Onboarding Extension to Transifex
 
-### Onboarding Extension to Transifex
 Here is a sample code that adds localization using Transifex. You can copy and use it as a template for your own extension, changing the values to the ones described in the code comments.
 
 ```javascript
@@ -133,5 +123,14 @@ To push strings for translation to Transifex you call `gulp i18n-export`and `gul
 
 To pull and perform the import of latest translations from Transifex to your extension, you need to call `gulp transifex-pull` and `gulp i18n-import` sequentially. This will pull translated XLF files from Transifex in first gulp task, and import them to i18n folder in JSON format.
 
-## LICENSE
-[MIT](License.txt)
+## Contributing
+
+In lieu of a formal styleguide, take care to maintain the existing coding style.  Add unit tests for any new or changed functionality. Lint and test your code using `npm test`.
+
+## License
+
+Copyright (c) Microsoft Corporation, Ferdinand Prantl
+
+Licensed under the [MIT License].
+
+[MIT License]: http://en.wikipedia.org/wiki/MIT_License

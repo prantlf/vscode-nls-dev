@@ -1,9 +1,10 @@
+.github/
 .vscode/
 lib/tests/
 lib/*.map
 src/
 test/
-.eslintrc
+.eslintrc.json
 .gitignore
+.mochjarc.json
 .npmignore
-.travis.yml

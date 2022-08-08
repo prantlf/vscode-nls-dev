@@ -3,5 +3,15 @@
 	"typescript.tsdk": "./node_modules/typescript/lib",
 	"editor.codeActionsOnSave": {
 		"source.fixAll.eslint": true
+	},
+	"files.exclude": {
+		"**/.git": true,
+		"**/.DS_Store": true,
+		"**/Thumbs.db": true,
+		"pnpm-lock.yaml": true
+	},
+	"search.exclude": {
+		"**/node_modules": true,
+		"**/lib": true
 	}
 }

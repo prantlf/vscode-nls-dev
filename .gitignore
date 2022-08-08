@@ -1,5 +1,2 @@
 lib/
-out/
 node_modules
-*.lsif
-*.db

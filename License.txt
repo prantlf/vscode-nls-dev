@@ -1,6 +1,7 @@
 The MIT License (MIT)
 
 Copyright (c) Microsoft Corporation
+          (c) Ferdinand Prantl
 
 All rights reserved. 
 
