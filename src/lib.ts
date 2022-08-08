@@ -32,9 +32,9 @@ class SingleFileServiceHost implements ts.LanguageServiceHost {
 	getCurrentDirectory = () => '';
 	getDefaultLibFileName = () => 'lib.d.ts';
 
-	fileExists = (path: string) => this.filename === path
+	fileExists = (path: string) => this.filename === path;
 	readFile = (path: string, _encoding?: string) => this.filename === path ?
-		this.file.getText(0, this.file.getLength()) : undefined
+		this.file.getText(0, this.file.getLength()) : undefined;
 }
 
 
