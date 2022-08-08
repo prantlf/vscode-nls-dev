@@ -1,6 +1,6 @@
 {
   "name": "@prantlf/vscode-nls-dev",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "description": "Development-time npm module for generating localisation string bundles from JavaScript files.",
   "homepage": "https://github.com/prantlf/vscode-nls-dev#readme",
   "author": {
